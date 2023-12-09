@@ -7,6 +7,8 @@ import pathlib
 import re
 import subprocess
 import sys
+import tomllib
+from collections import ChainMap
 from collections.abc import Generator, Sequence
 from functools import cached_property
 from multiprocessing import Pool
@@ -25,17 +27,33 @@ __version__ = "0.1.0"
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        """
-        The egret utility searches directory trees for input files, selecting lines
-        that match a pattern.  By default, a pattern matches an input line if the
-        regular expression (RE) in the pattern matches the input line without its
-        trailing newline.  An empty expression matches every line.  Each input line that
-        matches at least one of the patterns is written to the standard output.
-        """
+    DEFAULTS = {
+        "color": "auto",
+        "exclude": "^$",
+        "extend_include_type": [],
+        "include": ".*",
+        "include_type": [],
+        "jobs": 0,
+    }
+
+    config_parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False
     )
-    parser.add_argument("pattern")
-    parser.add_argument("dir", default=["."], nargs="*")
+    config_parser.add_argument("--config", help="Specify config file", metavar="FILE")
+    args, _ = config_parser.parse_known_args()
+
+    defaults = ChainMap(
+        DEFAULTS,
+        parse_config_toml(find_user_config_file()),
+        parse_config_toml(args.config),
+    )
+
+    parser = argparse.ArgumentParser(prog="egret", parents=[config_parser])
+    parser.set_defaults(**defaults)
+
+    parser.add_argument("pattern", metavar="PATTERN")
+    parser.add_argument("--version", action="version", version=f"egret {__version__}")
+    parser.add_argument("dir", default=["."], nargs="*", metavar="DIR")
     parser.add_argument(
         "--ignore-case",
         "-i",
@@ -60,8 +78,14 @@ def main() -> int:
             " starting at line 0."
         ),
     )
-    parser.add_argument("--include", default=".*", help="include files")
-    parser.add_argument("--exclude", default="^$", help="exclude files")
+    parser.add_argument(
+        "--include",
+        help="Files to include from the search",
+    )
+    parser.add_argument(
+        "--exclude",
+        help="Files to exclude from the search",
+    )
     parser.add_argument(
         "--invert-match",
         "-v",
@@ -71,13 +95,11 @@ def main() -> int:
     parser.add_argument(
         "--extend-include-type",
         action="append",
-        default=[],
         help="Extend the list of file types to search.",
     )
     parser.add_argument(
         "--include-type",
         action="append",
-        default=[],
         help="Specify the file type to search.",
     )
     parser.add_argument(
@@ -93,7 +115,6 @@ def main() -> int:
         "--jobs",
         "-j",
         type=int,
-        default=0,
         help=(
             "The number of worker processes. A value of 0 means to use the available"
             " processors."
@@ -102,7 +123,6 @@ def main() -> int:
     parser.add_argument(
         "--color",
         choices=("always", "auto", "never"),
-        default="auto",
         help="When to use syntax highlighting on the matched text.",
     )
 
@@ -155,6 +175,28 @@ def main() -> int:
         err(f"ignored unknown tags: {', '.join(sorted(unknown))}", file=sys.stderr)
 
     return 0 if files_matched else 1
+
+
+def find_user_config_file() -> str:
+    if sys.platform == "win32":
+        # Windows
+        user_config_path = pathlib.Path.home() / ".egret"
+    else:
+        config_root = os.environ.get("XDG_CONFIG_HOME", "~/.config")
+        user_config_path = pathlib.Path(config_root).expanduser() / "egret.toml"
+    return str(user_config_path.resolve())
+
+
+def parse_config_toml(path_to_config: str | None) -> dict[str, Any]:
+    if path_to_config is not None and pathlib.Path(path_to_config).is_file():
+        with open(path_to_config, "rb") as fp:
+            config_toml = tomllib.load(fp)
+        config: dict[str, Any] = config_toml.get("tool", {}).get("egret", {})
+        config = {k.replace("--", "").replace("-", "_"): v for k, v in config.items()}
+    else:
+        config = {}
+
+    return config
 
 
 class ProcessFiles:
