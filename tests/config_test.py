@@ -1,14 +1,23 @@
+import pathlib
+import sys
+
 import pytest
 
 import egret
 
 
 def test_find_config_file(monkeypatch):
-    with monkeypatch.context() as mp:
-        mp.setenv("XDG_CONFIG_HOME", "/not/a/real/dir")
+    if sys.platform == "win32":
         path_to_config = egret.find_user_config_file()
+        assert (
+            pathlib.Path(path_to_config) == pathlib.Path("~/.egret.toml").expanduser()
+        )
+    else:
+        with monkeypatch.context() as mp:
+            mp.setenv("XDG_CONFIG_HOME", "/not/a/real/dir")
+            path_to_config = egret.find_user_config_file()
 
-    assert path_to_config == "/not/a/real/dir/egret.toml"
+        assert path_to_config == "/not/a/real/dir/egret.toml"
 
 
 @pytest.mark.parametrize(

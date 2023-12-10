@@ -179,7 +179,7 @@ def main() -> int:
 
 def find_user_config_file() -> str:
     if sys.platform == "win32":
-        user_config_path = pathlib.Path.home() / ".egret"
+        user_config_path = pathlib.Path.home() / ".egret.toml"
     else:
         config_root = os.environ.get("XDG_CONFIG_HOME", "~/.config")
         user_config_path = pathlib.Path(config_root).expanduser() / "egret.toml"
