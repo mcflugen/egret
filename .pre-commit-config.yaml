@@ -1,3 +1,6 @@
+ci:
+  language_version: python3.12
+
 repos:
 - repo: https://github.com/psf/black
   rev: 23.11.0
