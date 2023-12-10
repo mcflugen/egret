@@ -1,6 +1,3 @@
-ci:
-  language_version: python3.12
-
 repos:
 - repo: https://github.com/psf/black
   rev: 23.11.0
@@ -64,6 +61,7 @@ repos:
   rev: v1.7.0
   hooks:
   - id: mypy
+    language_version: python3.12
     additional_dependencies: [types-all]
     exclude: conf.py$
 
