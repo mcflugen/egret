@@ -71,4 +71,7 @@ def test_git_files(git_dir, file_type, expected):
 )
 def test_walk_files(git_dir, file_type, expected):
     with as_cwd(git_dir):
-        assert sorted(egret.WalkFiles(include_types=(file_type,)).collect()) == expected
+        assert [
+            pathlib.Path(f)
+            for f in sorted(egret.WalkFiles(include_types=(file_type,)).collect())
+        ] == [pathlib.Path(f) for f in expected]
