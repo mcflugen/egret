@@ -65,7 +65,7 @@ version = {attr = "egret.__version__"}
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-testpaths = ["tests"]
+testpaths = ["tests", "egret.py"]
 norecursedirs = [".*", "*.egg*", "build", "dist", "utilities"]
 addopts = """
   --ignore setup.py
