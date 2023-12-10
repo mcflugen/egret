@@ -2,4 +2,5 @@
 *.py[co]
 /.coverage
 /.nox
+/build
 /dist

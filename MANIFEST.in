@@ -1,0 +1,3 @@
+include .pre-commit-config.yaml
+include noxfile.py
+recursive-include tests *.py
