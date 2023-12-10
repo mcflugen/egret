@@ -365,7 +365,7 @@ class WalkFiles(CollectFiles):
     def get_all_files(self) -> Generator[str, None, None]:
         file_list = []
         for root, dirs, files in pathlib.Path(self.top_level).walk():
-            for file_path in (pathlib.Path(root) / f for f in files):
+            for file_path in (root / f for f in files):
                 file_list.append(file_path)
             dirs[:] = [d for d in dirs if not self.ignore_path(d)]
 
