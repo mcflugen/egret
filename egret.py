@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tomllib
 from collections import ChainMap
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from functools import cached_property
 from multiprocessing import Pool
 from typing import Any
@@ -143,11 +143,13 @@ def main() -> int:
         FileCollector = GitFiles
 
     process_files = ProcessFiles(
-        LineSelector(args.pattern, max_count=max_count, invert_match=args.invert_match),
+        LineSelector(
+            args.pattern, max_count=max_count, invert_match=args.invert_match
+        ).select_from_path,
         Formatter(
             with_line_numbers=args.line_number,
             files_with_matches=args.files_with_matches,
-        ),
+        ).format,
         workers=args.jobs,
     )
 
@@ -200,15 +202,18 @@ def parse_config_toml(path_to_config: str | None) -> dict[str, Any]:
 
 class ProcessFiles:
     def __init__(
-        self, select_lines, format_selection, workers: int | None = None
+        self,
+        select_lines: Callable[[str], list[tuple[int, str]]],
+        format_selection: Callable[[str, list[tuple[int, str]]], str],
+        workers: int | None = None,
     ) -> None:
         self._select_lines = select_lines
         self._format_selection = format_selection
         self._workers = workers or os.cpu_count() or 1
 
     def one(self, filename: str) -> str:
-        if selected_lines := self._select_lines.select_from_path(filename):
-            formatted_lines = self._format_selection.format(filename, selected_lines)
+        if selected_lines := self._select_lines(filename):
+            formatted_lines = self._format_selection(filename, selected_lines)
             return formatted_lines
         return ""
 
