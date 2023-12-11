@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "egret"
+description = "grep python files"
+authors = [
+  {email = "mcflugen@gmail.com"},
+  {name = "Eric Hutton"},
+]
+maintainers = [
+  {email = "mcflugen@gmail.com"},
+  {name = "Eric Hutton"},
+]
+keywords = [
+  'python',
+  'utility',
+  'grep',
+]
+license = {text = "MIT"}
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Physics",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+requires-python = ">=3.12"
+dependencies = [
+	"identify",
+	"pygments",
+]
+dynamic = ["readme", "version"]
+
+[project.urls]
+homepage = "https://github.com/mcflugen/egret"
+documentation = "https://github.com/mcflugen/egret/blob/main/README.md"
+repository = "https://github.com/mcflugen/egret"
+changelog = "https://github.com/mcflugen/egret/blob/main/CHANGES.md"
+
+[project.optional-dependencies]
+dev = ["nox"]
+testing = ["pytest"]
+
+[project.scripts]
+egret = "egret:main"
+
+[tool.setuptools]
+py-modules = ["egret"]
+
+# [tool.setuptools.packages.find]
+# where = ["."]
+# include = ["gflex*"]
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.md", "AUTHORS.md", "CHANGES.md"], content-type="text/markdown"}
+version = {attr = "egret.__version__"}
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["tests", "egret.py"]
+norecursedirs = [".*", "*.egg*", "build", "dist", "utilities"]
+addopts = """
+  --ignore setup.py
+  --tb native
+  --strict
+  --durations 16
+  --doctest-modules
+  -vvv
+"""
+doctest_optionflags = [
+  "NORMALIZE_WHITESPACE",
+  "IGNORE_EXCEPTION_DETAIL",
+  "ALLOW_UNICODE"
+]
+
+[tool.isort]
+combine_as_imports = true
+profile = "black"

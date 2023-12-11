@@ -7,7 +7,9 @@ import pathlib
 import re
 import subprocess
 import sys
-from collections.abc import Generator, Sequence
+import tomllib
+from collections import ChainMap
+from collections.abc import Callable, Generator, Sequence
 from functools import cached_property
 from multiprocessing import Pool
 from typing import Any
@@ -25,17 +27,40 @@ __version__ = "0.1.0"
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        """
-        The egret utility searches directory trees for input files, selecting lines
-        that match a pattern.  By default, a pattern matches an input line if the
-        regular expression (RE) in the pattern matches the input line without its
-        trailing newline.  An empty expression matches every line.  Each input line that
-        matches at least one of the patterns is written to the standard output.
-        """
+    DEFAULTS = {
+        "color": "auto",
+        "exclude": "^$",
+        "extend_types": [],
+        "extend_types_or": [],
+        "include": ".*",
+        "jobs": 0,
+        "types": ["text"],
+        "types_or": ["cython", "python"],
+    }
+
+    config_parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False
     )
-    parser.add_argument("pattern")
-    parser.add_argument("dir", default=["."], nargs="*")
+    config_parser.add_argument("--config", help="Specify config file", metavar="FILE")
+    config_parser.add_argument(
+        "--version", action="version", version=f"egret {__version__}"
+    )
+
+    parser = argparse.ArgumentParser(prog="egret", parents=[config_parser])
+    args, _ = config_parser.parse_known_args()
+
+    defaults = ChainMap(
+        parse_config_toml(args.config),
+        parse_config_toml(find_user_config_file()),
+        DEFAULTS,
+    )
+
+    parser = argparse.ArgumentParser(prog="egret", parents=[config_parser])
+    parser.set_defaults(**defaults)
+
+    parser.add_argument("pattern", metavar="PATTERN")
+    parser.add_argument("dir", default=["."], nargs="*", metavar="DIR")
+
     parser.add_argument(
         "--ignore-case",
         "-i",
@@ -52,6 +77,16 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--invert-match",
+        "-v",
+        action="store_true",
+        help="Selected lines are those *not* matching any of the specified patterns.",
+    )
+
+    group = parser.add_argument_group(
+        "Formatting", description="Options for formatting output."
+    )
+    group.add_argument(
         "--line-number",
         "-n",
         action="store_true",
@@ -60,26 +95,46 @@ def main() -> int:
             " starting at line 0."
         ),
     )
-    parser.add_argument("--include", default=".*", help="include files")
-    parser.add_argument("--exclude", default="^$", help="exclude files")
-    parser.add_argument(
-        "--invert-match",
-        "-v",
-        action="store_true",
-        help="Selected lines are those *not* matching any of the specified patterns.",
+    group.add_argument(
+        "--color",
+        choices=("always", "auto", "never"),
+        help="When to use syntax highlighting on the matched text.",
     )
-    parser.add_argument(
-        "--extend-include-type",
+
+    group = parser.add_argument_group(
+        "Filtering",
+        description="Options that control how files are filtered by name and by type.",
+    )
+    group.add_argument(
+        "--include",
+        help="Files to include from the search",
+    )
+    group.add_argument(
+        "--exclude",
+        help="Files to exclude from the search",
+    )
+
+    group.add_argument(
+        "--types",
         action="append",
-        default=[],
+        help="list of file types to run on (AND)",
+    )
+    group.add_argument(
+        "--types-or",
+        action="append",
+        help="list of file types to run on (OR)",
+    )
+    group.add_argument(
+        "--extend-types",
+        action="append",
         help="Extend the list of file types to search.",
     )
-    parser.add_argument(
-        "--include-type",
+    group.add_argument(
+        "--extend-types-or",
         action="append",
-        default=[],
-        help="Specify the file type to search.",
+        help="Extend the list of file types to search.",
     )
+
     parser.add_argument(
         "--walk",
         "-w",
@@ -89,29 +144,29 @@ def main() -> int:
             " search files tracked by git."
         ),
     )
+
     parser.add_argument(
         "--jobs",
         "-j",
         type=int,
-        default=0,
         help=(
             "The number of worker processes. A value of 0 means to use the available"
             " processors."
         ),
     )
-    parser.add_argument(
-        "--color",
-        choices=("always", "auto", "never"),
-        default="auto",
-        help="When to use syntax highlighting on the matched text.",
-    )
 
     args = parser.parse_args()
 
+    all_tags = set(
+        args.types + args.types_or + args.extend_types + args.extend_types_or
+    )
+    if unknown := sorted(set(all_tags) - identify.ALL_TAGS):
+        err(f"unrecognized tag{'s' if len(unknown) > 1 else ''}: {', '.join(unknown)}")
+        err(f"known types: {', '.join(sorted(identify.ALL_TAGS))}")
+        return 1
+
     max_count = 1 if args.files_with_matches else -1
-    include_types = (
-        ["cython", "python"] if not args.include_type else args.include_type
-    ) + args.extend_include_type
+
     if args.color == "always" or (args.color == "auto" and sys.stdout.isatty()):
         Formatter: type[SelectionFormatter] = SelectionFormatterSyntaxHighlight
     else:
@@ -123,11 +178,13 @@ def main() -> int:
         FileCollector = GitFiles
 
     process_files = ProcessFiles(
-        LineSelector(args.pattern, max_count=max_count, invert_match=args.invert_match),
+        LineSelector(
+            args.pattern, max_count=max_count, invert_match=args.invert_match
+        ).select_from_path,
         Formatter(
             with_line_numbers=args.line_number,
             files_with_matches=args.files_with_matches,
-        ),
+        ).format,
         workers=args.jobs,
     )
 
@@ -137,7 +194,8 @@ def main() -> int:
             base=dir_,
             include=args.include,
             exclude=args.exclude,
-            include_types=include_types,
+            types=args.types + args.extend_types,
+            types_or=args.types_or + args.extend_types_or,
         )
         matches += process_files(files.collect())
 
@@ -151,23 +209,44 @@ def main() -> int:
             os.dup2(devnull, sys.stdout.fileno())
             break
 
-    if unknown := set(include_types) - identify.ALL_TAGS:
-        err(f"ignored unknown tags: {', '.join(sorted(unknown))}", file=sys.stderr)
-
     return 0 if files_matched else 1
+
+
+def find_user_config_file() -> str:
+    if sys.platform == "win32":
+        user_config_path = pathlib.Path.home() / ".egret.toml"
+    else:
+        config_root = os.environ.get("XDG_CONFIG_HOME", "~/.config")
+        user_config_path = pathlib.Path(config_root).expanduser() / "egret.toml"
+    return str(user_config_path.resolve())
+
+
+def parse_config_toml(path_to_config: str | None) -> dict[str, Any]:
+    if path_to_config is not None and pathlib.Path(path_to_config).is_file():
+        with open(path_to_config, "rb") as fp:
+            config_toml = tomllib.load(fp)
+        config: dict[str, Any] = config_toml.get("tool", {}).get("egret", {})
+        config = {k.replace("--", "").replace("-", "_"): v for k, v in config.items()}
+    else:
+        config = {}
+
+    return config
 
 
 class ProcessFiles:
     def __init__(
-        self, select_lines, format_selection, workers: int | None = None
+        self,
+        select_lines: Callable[[str], list[tuple[int, str]]],
+        format_selection: Callable[[str, list[tuple[int, str]]], str],
+        workers: int | None = None,
     ) -> None:
         self._select_lines = select_lines
         self._format_selection = format_selection
         self._workers = workers or os.cpu_count() or 1
 
     def one(self, filename: str) -> str:
-        if selected_lines := self._select_lines.select_from_path(filename):
-            formatted_lines = self._format_selection.format(filename, selected_lines)
+        if selected_lines := self._select_lines(filename):
+            formatted_lines = self._format_selection(filename, selected_lines)
             return formatted_lines
         return ""
 
@@ -271,15 +350,21 @@ class CollectFiles:
         base: str = ".",
         include: str = ".*",
         exclude: str = "^$",
-        include_types: Sequence[str] = ("python",),
+        types: Sequence[str] = ("python",),
+        types_or: Sequence[str] | None = None,
     ) -> None:
         self._include_pattern = re.compile(include)
         self._exclude_pattern = re.compile(exclude)
-        self._include_types = frozenset(include_types)
+        self._types = frozenset(types)
+        self._types_or = frozenset(types_or if types_or is not None else ())
         self._base = base
 
     def collect(self) -> Generator[str, None, None]:
         raise NotImplementedError("collect")
+
+    def filter_file_by_type(self, filename: str):
+        tags = identify.tags_from_path(filename)
+        return tags >= self._types and (not self._types_or or (tags & self._types_or))
 
 
 class WalkFiles(CollectFiles):
@@ -297,13 +382,15 @@ class WalkFiles(CollectFiles):
         base: str = ".",
         include: str = ".*",
         exclude: str = "^$",
-        include_types: Sequence[str] = ("python",),
+        types: Sequence[str] = ("text",),
+        types_or: Sequence[str] | None = ("python",),
     ) -> None:
         super().__init__(
             base=base,
             include=include,
             exclude=exclude,
-            include_types=include_types,
+            types=types,
+            types_or=types_or,
         )
 
         self._ignore_pattern = re.compile(WalkFiles.IGNORE_PATTERN)
@@ -317,14 +404,14 @@ class WalkFiles(CollectFiles):
             if (
                 self._include_pattern.search(filename)
                 and not self._exclude_pattern.search(filename)
-                and self._include_types & identify.tags_from_path(filename)
+                and self.filter_file_by_type(filename)
             ):
                 yield filename
 
     def get_all_files(self) -> Generator[str, None, None]:
         file_list = []
         for root, dirs, files in pathlib.Path(self.top_level).walk():
-            for file_path in (pathlib.Path(root) / f for f in files):
+            for file_path in (root / f for f in files):
                 file_list.append(file_path)
             dirs[:] = [d for d in dirs if not self.ignore_path(d)]
 
@@ -340,13 +427,15 @@ class GitFiles(CollectFiles):
         base: str = ".",
         include: str = ".*",
         exclude: str = "^$",
-        include_types: Sequence[str] = ("python",),
+        types: Sequence[str] = ("python",),
+        types_or: Sequence[str] | None = None,
     ) -> None:
         super().__init__(
             base=base,
             include=include,
             exclude=exclude,
-            include_types=include_types,
+            types=types,
+            types_or=types_or,
         )
 
         GitFiles.validate_git(self._base)
@@ -401,7 +490,7 @@ class GitFiles(CollectFiles):
             if (
                 self._include_pattern.search(filename)
                 and not self._exclude_pattern.search(filename)
-                and self._include_types & identify.tags_from_path(filename)
+                and self.filter_file_by_type(filename)
             ):
                 yield filename
 
