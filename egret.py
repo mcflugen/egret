@@ -30,30 +30,37 @@ def main() -> int:
     DEFAULTS = {
         "color": "auto",
         "exclude": "^$",
-        "extend_include_type": [],
+        "extend_types": [],
+        "extend_types_or": [],
         "include": ".*",
-        "include_type": [],
         "jobs": 0,
+        "types": ["text"],
+        "types_or": ["cython", "python"],
     }
 
     config_parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False
     )
     config_parser.add_argument("--config", help="Specify config file", metavar="FILE")
+    config_parser.add_argument(
+        "--version", action="version", version=f"egret {__version__}"
+    )
+
+    parser = argparse.ArgumentParser(prog="egret", parents=[config_parser])
     args, _ = config_parser.parse_known_args()
 
     defaults = ChainMap(
-        DEFAULTS,
-        parse_config_toml(find_user_config_file()),
         parse_config_toml(args.config),
+        parse_config_toml(find_user_config_file()),
+        DEFAULTS,
     )
 
     parser = argparse.ArgumentParser(prog="egret", parents=[config_parser])
     parser.set_defaults(**defaults)
 
     parser.add_argument("pattern", metavar="PATTERN")
-    parser.add_argument("--version", action="version", version=f"egret {__version__}")
     parser.add_argument("dir", default=["."], nargs="*", metavar="DIR")
+
     parser.add_argument(
         "--ignore-case",
         "-i",
@@ -70,6 +77,16 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--invert-match",
+        "-v",
+        action="store_true",
+        help="Selected lines are those *not* matching any of the specified patterns.",
+    )
+
+    group = parser.add_argument_group(
+        "Formatting", description="Options for formatting output."
+    )
+    group.add_argument(
         "--line-number",
         "-n",
         action="store_true",
@@ -78,30 +95,46 @@ def main() -> int:
             " starting at line 0."
         ),
     )
-    parser.add_argument(
+    group.add_argument(
+        "--color",
+        choices=("always", "auto", "never"),
+        help="When to use syntax highlighting on the matched text.",
+    )
+
+    group = parser.add_argument_group(
+        "Filtering",
+        description="Options that control how files are filtered by name and by type.",
+    )
+    group.add_argument(
         "--include",
         help="Files to include from the search",
     )
-    parser.add_argument(
+    group.add_argument(
         "--exclude",
         help="Files to exclude from the search",
     )
-    parser.add_argument(
-        "--invert-match",
-        "-v",
-        action="store_true",
-        help="Selected lines are those *not* matching any of the specified patterns.",
+
+    group.add_argument(
+        "--types",
+        action="append",
+        help="list of file types to run on (AND)",
     )
-    parser.add_argument(
-        "--extend-include-type",
+    group.add_argument(
+        "--types-or",
+        action="append",
+        help="list of file types to run on (OR)",
+    )
+    group.add_argument(
+        "--extend-types",
         action="append",
         help="Extend the list of file types to search.",
     )
-    parser.add_argument(
-        "--include-type",
+    group.add_argument(
+        "--extend-types-or",
         action="append",
-        help="Specify the file type to search.",
+        help="Extend the list of file types to search.",
     )
+
     parser.add_argument(
         "--walk",
         "-w",
@@ -111,6 +144,7 @@ def main() -> int:
             " search files tracked by git."
         ),
     )
+
     parser.add_argument(
         "--jobs",
         "-j",
@@ -120,18 +154,19 @@ def main() -> int:
             " processors."
         ),
     )
-    parser.add_argument(
-        "--color",
-        choices=("always", "auto", "never"),
-        help="When to use syntax highlighting on the matched text.",
-    )
 
     args = parser.parse_args()
 
+    all_tags = set(
+        args.types + args.types_or + args.extend_types + args.extend_types_or
+    )
+    if unknown := sorted(set(all_tags) - identify.ALL_TAGS):
+        err(f"unrecognized tag{'s' if len(unknown) > 1 else ''}: {', '.join(unknown)}")
+        err(f"known types: {', '.join(sorted(identify.ALL_TAGS))}")
+        return 1
+
     max_count = 1 if args.files_with_matches else -1
-    include_types = (
-        ["cython", "python"] if not args.include_type else args.include_type
-    ) + args.extend_include_type
+
     if args.color == "always" or (args.color == "auto" and sys.stdout.isatty()):
         Formatter: type[SelectionFormatter] = SelectionFormatterSyntaxHighlight
     else:
@@ -159,7 +194,8 @@ def main() -> int:
             base=dir_,
             include=args.include,
             exclude=args.exclude,
-            include_types=include_types,
+            types=args.types + args.extend_types,
+            types_or=args.types_or + args.extend_types_or,
         )
         matches += process_files(files.collect())
 
@@ -172,9 +208,6 @@ def main() -> int:
             devnull = os.open(os.devnull, os.O_WRONLY)
             os.dup2(devnull, sys.stdout.fileno())
             break
-
-    if unknown := set(include_types) - identify.ALL_TAGS:
-        err(f"ignored unknown tags: {', '.join(sorted(unknown))}", file=sys.stderr)
 
     return 0 if files_matched else 1
 
@@ -317,15 +350,21 @@ class CollectFiles:
         base: str = ".",
         include: str = ".*",
         exclude: str = "^$",
-        include_types: Sequence[str] = ("python",),
+        types: Sequence[str] = ("python",),
+        types_or: Sequence[str] | None = None,
     ) -> None:
         self._include_pattern = re.compile(include)
         self._exclude_pattern = re.compile(exclude)
-        self._include_types = frozenset(include_types)
+        self._types = frozenset(types)
+        self._types_or = frozenset(types_or if types_or is not None else ())
         self._base = base
 
     def collect(self) -> Generator[str, None, None]:
         raise NotImplementedError("collect")
+
+    def filter_file_by_type(self, filename: str):
+        tags = identify.tags_from_path(filename)
+        return tags >= self._types and (not self._types_or or (tags & self._types_or))
 
 
 class WalkFiles(CollectFiles):
@@ -343,13 +382,15 @@ class WalkFiles(CollectFiles):
         base: str = ".",
         include: str = ".*",
         exclude: str = "^$",
-        include_types: Sequence[str] = ("python",),
+        types: Sequence[str] = ("python",),
+        types_or: Sequence[str] | None = None,
     ) -> None:
         super().__init__(
             base=base,
             include=include,
             exclude=exclude,
-            include_types=include_types,
+            types=types,
+            types_or=types_or,
         )
 
         self._ignore_pattern = re.compile(WalkFiles.IGNORE_PATTERN)
@@ -363,7 +404,7 @@ class WalkFiles(CollectFiles):
             if (
                 self._include_pattern.search(filename)
                 and not self._exclude_pattern.search(filename)
-                and self._include_types & identify.tags_from_path(filename)
+                and self.filter_file_by_type(filename)
             ):
                 yield filename
 
@@ -386,13 +427,15 @@ class GitFiles(CollectFiles):
         base: str = ".",
         include: str = ".*",
         exclude: str = "^$",
-        include_types: Sequence[str] = ("python",),
+        types: Sequence[str] = ("python",),
+        types_or: Sequence[str] | None = None,
     ) -> None:
         super().__init__(
             base=base,
             include=include,
             exclude=exclude,
-            include_types=include_types,
+            types=types,
+            types_or=types_or,
         )
 
         GitFiles.validate_git(self._base)
@@ -447,7 +490,7 @@ class GitFiles(CollectFiles):
             if (
                 self._include_pattern.search(filename)
                 and not self._exclude_pattern.search(filename)
-                and self._include_types & identify.tags_from_path(filename)
+                and self.filter_file_by_type(filename)
             ):
                 yield filename
 
