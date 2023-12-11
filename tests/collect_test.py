@@ -23,7 +23,7 @@ FILES = {
     "bar.toml": textwrap.dedent(
         """\
         [tool.egret]
-        include-type = "ini"
+        types = ["ini"]
         """
     ),
     "foo.py": "import bar",
@@ -59,7 +59,7 @@ def test_in_dot_git(git_dir):
 )
 def test_git_files(git_dir, file_type, expected):
     with as_cwd(git_dir):
-        assert sorted(egret.GitFiles(include_types=(file_type,)).collect()) == expected
+        assert sorted(egret.GitFiles(types_or=(file_type,)).collect()) == expected
 
 
 @pytest.mark.parametrize(
@@ -73,5 +73,5 @@ def test_walk_files(git_dir, file_type, expected):
     with as_cwd(git_dir):
         assert [
             pathlib.Path(f)
-            for f in sorted(egret.WalkFiles(include_types=(file_type,)).collect())
+            for f in sorted(egret.WalkFiles(types_or=(file_type,)).collect())
         ] == [pathlib.Path(f) for f in expected]

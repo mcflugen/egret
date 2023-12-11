@@ -382,8 +382,8 @@ class WalkFiles(CollectFiles):
         base: str = ".",
         include: str = ".*",
         exclude: str = "^$",
-        types: Sequence[str] = ("python",),
-        types_or: Sequence[str] | None = None,
+        types: Sequence[str] = ("text",),
+        types_or: Sequence[str] | None = ("python",),
     ) -> None:
         super().__init__(
             base=base,

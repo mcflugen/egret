@@ -23,10 +23,10 @@ def test_find_config_file(monkeypatch):
 @pytest.mark.parametrize(
     "option",
     (
-        "--include-type",
-        "--include_type",
-        "include_type",
-        "include-type",
+        "--extend-types-or",
+        "--extend_types_or",
+        "extend_types_or",
+        "extend-types-or",
     ),
 )
 def test_parse_config(tmpdir, option):
@@ -41,7 +41,7 @@ def test_parse_config(tmpdir, option):
             )
         config = egret.parse_config_toml("egret.toml")
 
-    assert config == {"include_type": "ini"}
+    assert config == {"extend_types_or": "ini"}
 
 
 @pytest.mark.parametrize("contents", ("", "[tool.egret]"))
