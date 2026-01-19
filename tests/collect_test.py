@@ -20,12 +20,10 @@ def as_cwd(path):
 
 FILES = {
     ".git/foo.py": "import bar",
-    "bar.toml": textwrap.dedent(
-        """\
+    "bar.toml": textwrap.dedent("""\
         [tool.egret]
         types = ["ini"]
-        """
-    ),
+        """),
     "foo.py": "import bar",
     "foobar/__init__.py": "#! /usr/bin/python",
 }
