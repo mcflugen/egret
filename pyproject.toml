@@ -18,12 +18,12 @@ keywords = [
   'utility',
   'grep',
 ]
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE.md"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Operating System :: OS Independent",
   "Topic :: Scientific/Engineering :: Physics",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
