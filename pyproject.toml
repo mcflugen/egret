@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "egret"
+name = "grist"
 description = "grep python files"
 authors = [
   {email = "mcflugen@gmail.com"},
@@ -40,29 +40,29 @@ dependencies = [
 dynamic = ["readme", "version"]
 
 [project.urls]
-homepage = "https://github.com/mcflugen/egret"
-documentation = "https://github.com/mcflugen/egret/blob/main/README.md"
-repository = "https://github.com/mcflugen/egret"
-changelog = "https://github.com/mcflugen/egret/blob/main/CHANGES.md"
+homepage = "https://github.com/mcflugen/grist"
+documentation = "https://github.com/mcflugen/grist/blob/main/README.md"
+repository = "https://github.com/mcflugen/grist"
+changelog = "https://github.com/mcflugen/grist/blob/main/CHANGES.md"
 
 [project.optional-dependencies]
 dev = ["nox"]
 testing = ["pytest"]
 
 [project.scripts]
-egret = "egret:main"
+grist = "grist:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["egret"]
+py-modules = ["grist"]
 
 [tool.setuptools.dynamic]
 readme = {file = ["README.md", "AUTHORS.md", "CHANGES.md"], content-type="text/markdown"}
-version = {attr = "egret.__version__"}
+version = {attr = "grist.__version__"}
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-testpaths = ["tests", "egret.py"]
+testpaths = ["tests", "grist.py"]
 norecursedirs = [".*", "*.egg*", "build", "dist", "utilities"]
 addopts = """
   --ignore setup.py

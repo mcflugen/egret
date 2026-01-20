@@ -45,10 +45,10 @@ def main() -> int:
     )
     config_parser.add_argument("--config", help="Specify config file", metavar="FILE")
     config_parser.add_argument(
-        "--version", action="version", version=f"egret {__version__}"
+        "--version", action="version", version=f"grist {__version__}"
     )
 
-    parser = argparse.ArgumentParser(prog="egret", parents=[config_parser])
+    parser = argparse.ArgumentParser(prog="grist", parents=[config_parser])
     args, _ = config_parser.parse_known_args()
 
     defaults = ChainMap(
@@ -57,7 +57,7 @@ def main() -> int:
         DEFAULTS,
     )
 
-    parser = argparse.ArgumentParser(prog="egret", parents=[config_parser])
+    parser = argparse.ArgumentParser(prog="grist", parents=[config_parser])
     parser.set_defaults(**defaults)
 
     parser.add_argument("pattern", metavar="PATTERN")
@@ -216,10 +216,10 @@ def main() -> int:
 
 def find_user_config_file() -> str:
     if sys.platform == "win32":
-        user_config_path = pathlib.Path.home() / ".egret.toml"
+        user_config_path = pathlib.Path.home() / ".grist.toml"
     else:
         config_root = os.environ.get("XDG_CONFIG_HOME", "~/.config")
-        user_config_path = pathlib.Path(config_root).expanduser() / "egret.toml"
+        user_config_path = pathlib.Path(config_root).expanduser() / "grist.toml"
     return str(user_config_path.resolve())
 
 
@@ -227,7 +227,7 @@ def parse_config_toml(path_to_config: str | None) -> dict[str, Any]:
     if path_to_config is not None and pathlib.Path(path_to_config).is_file():
         with open(path_to_config, "rb") as fp:
             config_toml = tomllib.load(fp)
-        config: dict[str, Any] = config_toml.get("tool", {}).get("egret", {})
+        config: dict[str, Any] = config_toml.get("tool", {}).get("grist", {})
         config = {k.replace("--", "").replace("-", "_"): v for k, v in config.items()}
     else:
         config = {}

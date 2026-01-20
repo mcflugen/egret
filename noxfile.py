@@ -17,8 +17,8 @@ def test(session: nox.Session) -> None:
 def test_cli(session: nox.Session) -> None:
     """Test the command line interface."""
     session.install(".")
-    session.run("egret", "--help")
-    session.run("egret", "--version")
+    session.run("grist", "--help")
+    session.run("grist", "--version")
 
 
 @nox.session
@@ -71,7 +71,7 @@ def clean(session):
         with session.chdir(folder):
             shutil.rmtree("build", ignore_errors=True)
             shutil.rmtree("build/wheelhouse", ignore_errors=True)
-            shutil.rmtree("egret.egg-info", ignore_errors=True)
+            shutil.rmtree("grist.egg-info", ignore_errors=True)
             shutil.rmtree(".pytest_cache", ignore_errors=True)
             shutil.rmtree(".venv", ignore_errors=True)
 
