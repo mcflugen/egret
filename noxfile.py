@@ -3,18 +3,17 @@ import shutil
 
 import nox
 
-PYTHON_VERSION = "3.12"
 ROOT = pathlib.Path(__file__).parent
 
 
-@nox.session(python=PYTHON_VERSION, venv_backend="conda")
+@nox.session
 def test(session: nox.Session) -> None:
     """Run the tests."""
     session.install("-e", ".[testing]")
     session.run("pytest", "-vvv")
 
 
-@nox.session(name="test-cli", python=PYTHON_VERSION, venv_backend="conda")
+@nox.session(name="test-cli")
 def test_cli(session: nox.Session) -> None:
     """Test the command line interface."""
     session.install(".")
