@@ -29,6 +29,8 @@ def err(*args, **kwds):
     print(*args, file=sys.stderr, **kwds)
 
 
+out = err
+
 __version__ = "0.1.0"
 
 
@@ -83,6 +85,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("pattern", metavar="PATTERN")
     parser.add_argument("dir", default=["."], nargs="*", metavar="DIR")
 
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Be verbose",
+    )
     parser.add_argument(
         "--ignore-case",
         "-i",
@@ -210,6 +217,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         encoding.add("text")
     if args.search_binary:
         encoding.add("binary")
+
+    if args.verbose:
+        out(f"encoding: {' | '.join(sorted(encoding))}")
+        out(f"types: {' | '.join(sorted(all_types - no_types))}")
 
     max_count = 1 if args.files_with_matches else -1
 
