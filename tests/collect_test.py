@@ -4,9 +4,8 @@ import pathlib
 import subprocess
 import textwrap
 
-import pytest
-
 import egret
+import pytest
 
 
 @contextlib.contextmanager
