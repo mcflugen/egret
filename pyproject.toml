@@ -53,11 +53,8 @@ testing = ["pytest"]
 egret = "egret:main"
 
 [tool.setuptools]
+package-dir = {"" = "src"}
 py-modules = ["egret"]
-
-# [tool.setuptools.packages.find]
-# where = ["."]
-# include = ["gflex*"]
 
 [tool.setuptools.dynamic]
 readme = {file = ["README.md", "AUTHORS.md", "CHANGES.md"], content-type="text/markdown"}

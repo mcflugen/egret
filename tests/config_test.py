@@ -1,9 +1,8 @@
 import pathlib
 import sys
 
-import pytest
-
 import egret
+import pytest
 
 
 def test_find_config_file(monkeypatch):
