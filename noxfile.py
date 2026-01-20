@@ -1,3 +1,4 @@
+import os
 import pathlib
 import shutil
 
@@ -19,6 +20,28 @@ def test_cli(session: nox.Session) -> None:
     session.install(".")
     session.run("grist", "--help")
     session.run("grist", "--version")
+
+
+@nox.session
+def coverage(session: nox.Session) -> None:
+    """Run coverage."""
+    session.install("coverage", "pytest")
+    session.install("-e", ".")
+
+    session.run(
+        "coverage",
+        "run",
+        "-m",
+        "pytest",
+        "src/grist.py",
+        "tests",
+        "--doctest-modules",
+        env={"COVERAGE_CORE": "sysmon"},
+    )
+
+    session.run("coverage", "report", "--ignore-errors", "--show-missing")
+    if "CI" in os.environ:
+        session.run("coverage", "xml", "-o", "coverage.xml")
 
 
 @nox.session
