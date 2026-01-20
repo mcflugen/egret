@@ -4,7 +4,7 @@ import pathlib
 import subprocess
 import textwrap
 
-import egret
+import grist
 import pytest
 
 
@@ -20,7 +20,7 @@ def as_cwd(path):
 FILES = {
     ".git/foo.py": "import bar",
     "bar.toml": textwrap.dedent("""\
-        [tool.egret]
+        [tool.grist]
         types = ["ini"]
         """),
     "foo.py": "import bar",
@@ -44,7 +44,7 @@ def git_dir(tmp_path_factory):
 
 def test_in_dot_git(git_dir):
     with pytest.raises(RuntimeError):
-        egret.GitFiles(git_dir / ".git")
+        grist.GitFiles(git_dir / ".git")
 
 
 @pytest.mark.parametrize(
@@ -56,7 +56,7 @@ def test_in_dot_git(git_dir):
 )
 def test_git_files(git_dir, file_type, expected):
     with as_cwd(git_dir):
-        assert sorted(egret.GitFiles(types_or=(file_type,)).collect()) == expected
+        assert sorted(grist.GitFiles(types_or=(file_type,)).collect()) == expected
 
 
 @pytest.mark.parametrize(
@@ -70,5 +70,5 @@ def test_walk_files(git_dir, file_type, expected):
     with as_cwd(git_dir):
         assert [
             pathlib.Path(f)
-            for f in sorted(egret.WalkFiles(types_or=(file_type,)).collect())
+            for f in sorted(grist.WalkFiles(types_or=(file_type,)).collect())
         ] == [pathlib.Path(f) for f in expected]
