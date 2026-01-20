@@ -9,7 +9,9 @@ import subprocess
 import sys
 import tomllib
 from collections import ChainMap
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable
+from collections.abc import Generator
+from collections.abc import Sequence
 from functools import cached_property
 from multiprocessing import Pool
 from typing import Any
@@ -250,9 +252,7 @@ class ProcessFiles:
             return formatted_lines
         return ""
 
-    def __call__(
-        self, files: Sequence[str] | Generator[str, None, None]
-    ) -> Generator[str, None, None]:
+    def __call__(self, files: Sequence[str] | Generator[str]) -> Generator[str]:
         with Pool(processes=self._workers) as pool:
             formatted_lines = pool.map(self.one, files)
         return (line for line in formatted_lines if line)
@@ -359,7 +359,7 @@ class CollectFiles:
         self._types_or = frozenset(types_or if types_or is not None else ())
         self._base = base
 
-    def collect(self) -> Generator[str, None, None]:
+    def collect(self) -> Generator[str]:
         raise NotImplementedError("collect")
 
     def filter_file_by_type(self, filename: str):
@@ -399,7 +399,7 @@ class WalkFiles(CollectFiles):
     def top_level(self) -> str:
         return str(pathlib.Path(self._base))
 
-    def collect(self) -> Generator[str, None, None]:
+    def collect(self) -> Generator[str]:
         for filename in self.get_all_files():
             if (
                 self._include_pattern.search(filename)
@@ -408,7 +408,7 @@ class WalkFiles(CollectFiles):
             ):
                 yield filename
 
-    def get_all_files(self) -> Generator[str, None, None]:
+    def get_all_files(self) -> Generator[str]:
         file_list = []
         for root, dirs, files in pathlib.Path(self.top_level).walk():
             for file_path in (root / f for f in files):
@@ -470,7 +470,7 @@ class GitFiles(CollectFiles):
             .strip()
         )
 
-    def get_all_files(self, relative: bool = False) -> Generator[str, None, None]:
+    def get_all_files(self, relative: bool = False) -> Generator[str]:
         output = subprocess.check_output(
             ["git", "ls-files", "-z"], cwd=self.top_level
         ).decode()
@@ -485,7 +485,7 @@ class GitFiles(CollectFiles):
             all_files = (str(path_to_top / path) for path in all_files)
         return all_files
 
-    def collect(self) -> Generator[str, None, None]:
+    def collect(self) -> Generator[str]:
         for filename in self.get_all_files(relative=True):
             if (
                 self._include_pattern.search(filename)
