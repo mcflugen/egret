@@ -21,6 +21,7 @@ from identify import identify
 from pygments import highlight
 from pygments.formatters import TerminalTrueColorFormatter
 from pygments.lexers import TextLexer
+from pygments.util import ClassNotFound
 
 err = functools.partial(print, file=sys.stderr)
 out = functools.partial(print, file=sys.stderr)
@@ -235,6 +236,26 @@ def parse_config_toml(path_to_config: str | None) -> dict[str, Any]:
     return config
 
 
+def _tags_for(filename: str) -> set[str]:
+    return (
+        identify.tags_from_path(filename)
+        if os.path.exists(filename)
+        else identify.tags_from_filename(filename)
+    )
+
+
+def _pick_best_lexer(tags: set[str]) -> type[pygments.lexers.Lexer]:
+    for tag in sorted(tags):
+        try:
+            lexer = pygments.lexers.find_lexer_class_by_name(tag)
+        except ClassNotFound:
+            continue
+        else:
+            return lexer
+
+    return TextLexer
+
+
 class ProcessFiles:
     def __init__(
         self,
@@ -329,14 +350,9 @@ class SelectionFormatterSyntaxHighlight(SelectionFormatter):
         self._lexer = TextLexer(ensurenl=False)
 
     def format(self, filename: str, selections: Sequence[tuple[int, str]]) -> str:
-        tags = identify.tags_from_path(filename) - self._ignore_tags
+        tags = _tags_for(filename) - self._ignore_tags
 
-        try:
-            self._lexer = pygments.lexers.find_lexer_class_by_name(sorted(tags)[0])(
-                ensurenl=False
-            )
-        except IndexError:
-            self._lexer = TextLexer()
+        self._lexer = _pick_best_lexer(tags)(ensurenl=False)
 
         return super().format(filename, selections)
 
