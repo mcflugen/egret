@@ -64,3 +64,14 @@ def test_encoding(capsys, tmpdir, text, binary):
 
     matches = {line.strip() for line in capsys.readouterr().out.splitlines()}
     assert matches == expected
+
+
+def test_find_files(capsys, tmpdir):
+    (tmpdir / "baz.py").write("foobar")
+    (tmpdir / "foobar.py").write("baz")
+    with tmpdir.as_cwd():
+        main(["--walk", "foobar", "-l"])
+        assert capsys.readouterr().out.strip() == "baz.py"
+
+        main(["--walk", "foobar", "-l", "--find-files"])
+        assert capsys.readouterr().out.strip() == "foobar.py"
