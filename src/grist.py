@@ -29,7 +29,9 @@ out = functools.partial(print, file=sys.stderr)
 __version__ = "0.1.0"
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
+    argv = argv if argv is not None else sys.argv[1:]
+
     DEFAULTS = {
         "color": "auto",
         "exclude": "^$",
@@ -50,7 +52,7 @@ def main() -> int:
     )
 
     parser = argparse.ArgumentParser(prog="grist", parents=[config_parser])
-    args, _ = config_parser.parse_known_args()
+    args, _ = config_parser.parse_known_args(argv)
 
     defaults = ChainMap(
         parse_config_toml(args.config),
@@ -158,7 +160,7 @@ def main() -> int:
         ),
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     all_tags = set(
         args.types + args.types_or + args.extend_types + args.extend_types_or
