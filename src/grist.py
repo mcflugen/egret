@@ -9,6 +9,7 @@ import sys
 import tomllib
 from collections import ChainMap
 from collections.abc import Callable
+from collections.abc import Collection
 from collections.abc import Generator
 from collections.abc import Iterable
 from collections.abc import Sequence
@@ -60,8 +61,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "extend_types_or": [],
         "include": ".*",
         "jobs": 0,
-        "types": ["text"],
-        "types_or": ["cython", "python"],
+        "types": [],
+        "no_types": [],
+        "search_text": True,
+        "search_binary": False,
     }
 
     pre_parser = _build_pre_parser()
@@ -132,26 +135,40 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--exclude",
         help="Files to exclude from the search",
     )
-
     group.add_argument(
-        "--types",
+        "--type",
+        dest="types",
         action="append",
-        help="list of file types to run on (AND)",
+        metavar="TYPE",
+        default=None,
+        type=_validate_type,
+        help=(
+            "Restrict search to this file type (repeatable). If specified, replaces"
+            " the default type set."
+        ),
     )
     group.add_argument(
-        "--types-or",
+        "--no-type",
+        dest="no_types",
         action="append",
-        help="list of file types to run on (OR)",
+        metavar="TYPE",
+        default=None,
+        type=_validate_type,
+        help="Remove a file type from the search set.",
     )
     group.add_argument(
-        "--extend-types",
-        action="append",
-        help="Extend the list of file types to search.",
+        "--text",
+        dest="search_text",
+        default=True,
+        action=argparse.BooleanOptionalAction,
+        help="Search text files",
     )
     group.add_argument(
-        "--extend-types-or",
-        action="append",
-        help="Extend the list of file types to search.",
+        "--binary",
+        dest="search_binary",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help="Search binary files",
     )
 
     parser.add_argument(
@@ -180,13 +197,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    all_tags = set(
-        args.types + args.types_or + args.extend_types + args.extend_types_or
-    )
-    if unknown := sorted(set(all_tags) - ALL_TAGS):
-        err(f"unrecognized tag{'s' if len(unknown) > 1 else ''}: {', '.join(unknown)}")
-        err("use --print-types to get a list of valid types")
-        return 1
+    all_types = set(args.types if args.types is not None else defaults["types"])
+    no_types = set(args.no_types if args.no_types is not None else defaults["no_types"])
+
+    encoding = set()
+    if args.search_text:
+        encoding.add("text")
+    if args.search_binary:
+        encoding.add("binary")
 
     max_count = 1 if args.files_with_matches else -1
 
@@ -217,8 +235,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             base=dir_,
             include=args.include,
             exclude=args.exclude,
-            types=args.types + args.extend_types,
-            types_or=args.types_or + args.extend_types_or,
+            types=all_types,
+            exclude_types=no_types,
+            encoding=encoding,
         )
         matches += process_files(files.collect())
 
@@ -238,6 +257,15 @@ def print_pipe_safe(lines: Iterable[str]) -> int:
             os.dup2(devnull, sys.stdout.fileno())
             break
     return line_count
+
+
+def _validate_type(value: str) -> str:
+    if value not in identify.ALL_TAGS:
+        raise argparse.ArgumentTypeError(
+            f"unknown file type {value!r}. Use --print-types to get a list"
+            " of valid types"
+        )
+    return value
 
 
 def find_user_config_file() -> str:
@@ -389,21 +417,33 @@ class CollectFiles:
         base: str = ".",
         include: str = ".*",
         exclude: str = "^$",
-        types: Sequence[str] = ("python",),
-        types_or: Sequence[str] | None = None,
+        types: Collection[str] = (),
+        exclude_types: Collection[str] = (),
+        encoding: Collection[str] = ("text",),
     ) -> None:
         self._include_pattern = re.compile(include)
         self._exclude_pattern = re.compile(exclude)
         self._types = frozenset(types)
-        self._types_or = frozenset(types_or if types_or is not None else ())
         self._base = base
+        self._exclude_types = frozenset(exclude_types)
+        self._encoding = frozenset(encoding)
 
     def collect(self) -> Generator[str]:
         raise NotImplementedError("collect")
 
-    def filter_file_by_type(self, filename: str):
+    def filter_file_by_type(self, filename: str) -> bool:
         tags = identify.tags_from_path(filename)
-        return tags >= self._types and (not self._types_or or (tags & self._types_or))
+
+        if self._exclude_types & tags:
+            return False
+
+        if not (self._encoding & tags):
+            return False
+
+        if not self._types:
+            return True
+
+        return bool(tags & self._types)
 
 
 class WalkFiles(CollectFiles):
@@ -421,15 +461,17 @@ class WalkFiles(CollectFiles):
         base: str = ".",
         include: str = ".*",
         exclude: str = "^$",
-        types: Sequence[str] = ("text",),
-        types_or: Sequence[str] | None = ("python",),
+        types: Collection[str] = (),
+        exclude_types: Collection[str] = (),
+        encoding: Collection[str] = ("text",),
     ) -> None:
         super().__init__(
             base=base,
             include=include,
             exclude=exclude,
             types=types,
-            types_or=types_or,
+            exclude_types=exclude_types,
+            encoding=encoding,
         )
 
         self._ignore_pattern = re.compile(WalkFiles.IGNORE_PATTERN)
@@ -466,15 +508,17 @@ class GitFiles(CollectFiles):
         base: str = ".",
         include: str = ".*",
         exclude: str = "^$",
-        types: Sequence[str] = ("python",),
-        types_or: Sequence[str] | None = None,
+        types: Collection[str] = (),
+        exclude_types: Collection[str] = (),
+        encoding: Collection[str] = ("text",),
     ) -> None:
         super().__init__(
             base=base,
             include=include,
             exclude=exclude,
             types=types,
-            types_or=types_or,
+            exclude_types=exclude_types,
+            encoding=encoding,
         )
 
         GitFiles.validate_git(self._base)
