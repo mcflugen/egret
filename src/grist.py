@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import functools
 import os
 import pathlib
 import re
@@ -11,6 +10,7 @@ import tomllib
 from collections import ChainMap
 from collections.abc import Callable
 from collections.abc import Generator
+from collections.abc import Iterable
 from collections.abc import Sequence
 from functools import cached_property
 from multiprocessing import Pool
@@ -23,10 +23,31 @@ from pygments.formatters import TerminalTrueColorFormatter
 from pygments.lexers import TextLexer
 from pygments.util import ClassNotFound
 
-err = functools.partial(print, file=sys.stderr)
-out = functools.partial(print, file=sys.stderr)
+
+def err(*args, **kwds):
+    print(*args, file=sys.stderr, **kwds)
+
 
 __version__ = "0.1.0"
+
+
+ALL_TAGS = frozenset(identify.ALL_TAGS - identify.TYPE_TAGS - identify.MODE_TAGS)
+
+
+def _build_pre_parser():
+    pre_parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+    pre_parser.add_argument("--config", help="Specify config file", metavar="FILE")
+    pre_parser.add_argument(
+        "--version", action="version", version=f"grist {__version__}"
+    )
+    pre_parser.add_argument(
+        "--print-types", action="store_true", help="Print all valid file types."
+    )
+
+    return pre_parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -43,24 +64,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         "types_or": ["cython", "python"],
     }
 
-    config_parser = argparse.ArgumentParser(
-        formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False
-    )
-    config_parser.add_argument("--config", help="Specify config file", metavar="FILE")
-    config_parser.add_argument(
-        "--version", action="version", version=f"grist {__version__}"
-    )
+    pre_parser = _build_pre_parser()
 
-    parser = argparse.ArgumentParser(prog="grist", parents=[config_parser])
-    args, _ = config_parser.parse_known_args(argv)
+    early_args, _ = pre_parser.parse_known_args(argv)
 
     defaults = ChainMap(
-        parse_config_toml(args.config),
+        parse_config_toml(early_args.config),
         parse_config_toml(find_user_config_file()),
         DEFAULTS,
     )
 
-    parser = argparse.ArgumentParser(prog="grist", parents=[config_parser])
+    parser = argparse.ArgumentParser(prog="grist", parents=[pre_parser])
     parser.set_defaults(**defaults)
 
     parser.add_argument("pattern", metavar="PATTERN")
@@ -160,14 +174,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
 
+    if early_args.print_types:
+        print_pipe_safe(sorted(ALL_TAGS))
+        return 0
+
     args = parser.parse_args(argv)
 
     all_tags = set(
         args.types + args.types_or + args.extend_types + args.extend_types_or
     )
-    if unknown := sorted(set(all_tags) - identify.ALL_TAGS):
+    if unknown := sorted(set(all_tags) - ALL_TAGS):
         err(f"unrecognized tag{'s' if len(unknown) > 1 else ''}: {', '.join(unknown)}")
-        err(f"known types: {', '.join(sorted(identify.ALL_TAGS))}")
+        err("use --print-types to get a list of valid types")
         return 1
 
     max_count = 1 if args.files_with_matches else -1
@@ -204,17 +222,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         matches += process_files(files.collect())
 
-    files_matched = 0
-    for match in matches:
-        files_matched += 1
+    files_matched = print_pipe_safe(matches)
+
+    return 0 if files_matched else 1
+
+
+def print_pipe_safe(lines: Iterable[str]) -> int:
+    line_count = 0
+    for line in lines:
+        line_count += 1
         try:
-            print(match)
+            print(line)
         except BrokenPipeError:
             devnull = os.open(os.devnull, os.O_WRONLY)
             os.dup2(devnull, sys.stdout.fileno())
             break
-
-    return 0 if files_matched else 1
+    return line_count
 
 
 def find_user_config_file() -> str:
@@ -317,9 +340,7 @@ class SelectionFormatter:
     ) -> None:
         self._with_line_numbers = with_line_numbers
         self._files_with_matches = files_with_matches
-        self._ignore_tags = frozenset(
-            identify.TYPE_TAGS | identify.MODE_TAGS | identify.ENCODING_TAGS
-        )
+        self._ignore_tags = frozenset(identify.TYPE_TAGS | identify.MODE_TAGS)
 
     def format(self, filename: str, selections: Sequence[tuple[int, str]]) -> str:
         if selections and self._files_with_matches:
