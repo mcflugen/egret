@@ -90,6 +90,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Perform case insensitive matching.",
     )
     parser.add_argument(
+        "--find-files",
+        action="store_true",
+        help="Apply pattern to filenames.",
+    )
+    parser.add_argument(
         "--files-with-matches",
         "-l",
         action="store_true",
@@ -218,10 +223,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         FileCollector = GitFiles
 
+    SelectorCls: type[Selector]
+
+    if args.find_files:
+        SelectorCls = FilenameSelector
+    else:
+        SelectorCls = LineSelector
+
+    select = SelectorCls(
+        args.pattern,
+        max_count=max_count,
+        invert_match=args.invert_match,
+        ignore_case=args.ignore_case,
+    )
+
     process_files = ProcessFiles(
-        LineSelector(
-            args.pattern, max_count=max_count, invert_match=args.invert_match
-        ).select_from_path,
+        select.select_from_path,
         Formatter(
             with_line_numbers=args.line_number,
             files_with_matches=args.files_with_matches,
@@ -239,7 +256,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             exclude_types=no_types,
             encoding=encoding,
         )
-        matches += process_files(files.collect())
+        collected_files = files.collect()
+        matches += process_files(collected_files)
 
     files_matched = print_pipe_safe(matches)
 
@@ -332,19 +350,38 @@ class ProcessFiles:
         return (line for line in formatted_lines if line)
 
 
-class LineSelector:
+class Selector:
     def __init__(
-        self, pattern: str, max_count: int = -1, invert_match: bool = False
+        self,
+        pattern: str,
+        max_count: int = -1,
+        invert_match: bool = False,
+        ignore_case: bool = False,
     ) -> None:
-        self._pattern = re.compile(pattern)
+        flags = re.NOFLAG
+        if ignore_case:
+            flags |= re.IGNORECASE
+
+        self._pattern = re.compile(pattern, flags=flags)
         self._max_count = max_count
         self._invert_match = invert_match
 
     def select_from_path(self, filename: str) -> list[tuple[int, str]]:
-        with open(filename) as fp:
-            return self.select_from_filelike(fp)
+        raise NotImplementedError("select_from_path")
 
-    def select_from_filelike(self, filelike) -> list[tuple[int, str]]:
+    def match_line(self, line: str) -> bool:
+        if self._invert_match:
+            return not self._pattern.search(line)
+        else:
+            return bool(self._pattern.search(line))
+
+
+class LineSelector(Selector):
+    def select_from_path(self, filename: str) -> list[tuple[int, str]]:
+        with open(filename) as fp:
+            return self._select_from_filelike(fp)
+
+    def _select_from_filelike(self, filelike) -> list[tuple[int, str]]:
         count = 0
         selected = []
         for lineno, line in enumerate(filelike):
@@ -355,11 +392,10 @@ class LineSelector:
                     break
         return selected
 
-    def match_line(self, line: str) -> bool:
-        if self._invert_match:
-            return not self._pattern.search(line)
-        else:
-            return bool(self._pattern.search(line))
+
+class FilenameSelector(Selector):
+    def select_from_path(self, filename: str) -> list[tuple[int, str]]:
+        return [(0, filename)] if self.match_line(filename) else []
 
 
 class SelectionFormatter:
