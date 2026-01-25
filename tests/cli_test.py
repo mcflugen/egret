@@ -75,3 +75,24 @@ def test_find_files(capsys, tmpdir):
 
         main(["--walk", "foobar", "-l", "--find-files"])
         assert capsys.readouterr().out.strip() == "foobar.py"
+
+
+@pytest.mark.parametrize("types", (("python", "json"), ("toml",)))
+@pytest.mark.parametrize("binary", (True, False))
+@pytest.mark.parametrize("text", (True, False))
+def test_verbose(capsys, binary, text, types):
+    args = [f"--type={t}" for t in types]
+    args.append("--text" if text else "--no-text")
+    args.append("--binary" if binary else "--no-binary")
+
+    main(["--walk", "foobar", "-l", "--verbose", *args])
+    lines = capsys.readouterr().err.splitlines()
+
+    encodings = []
+    if binary:
+        encodings.append("binary")
+    if text:
+        encodings.append("text")
+
+    assert lines[0] == f"encoding: {' | '.join(sorted(encodings))}"
+    assert lines[1] == f"types: {' | '.join(sorted(types))}"
