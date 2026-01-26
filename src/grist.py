@@ -12,6 +12,7 @@ from collections.abc import Callable
 from collections.abc import Collection
 from collections.abc import Generator
 from collections.abc import Iterable
+from collections.abc import Iterator
 from collections.abc import Sequence
 from functools import cached_property
 from multiprocessing import Pool
@@ -350,14 +351,20 @@ class ProcessFiles:
         self._workers = workers or os.cpu_count() or 1
 
     def one(self, filename: str) -> str:
-        if selected_lines := self._select_lines(filename):
-            formatted_lines = self._format_selection(filename, selected_lines)
-            return formatted_lines
+        try:
+            if selected_lines := self._select_lines(filename):
+                formatted_lines = self._format_selection(filename, selected_lines)
+                return formatted_lines
+        except UnicodeDecodeError:
+            print(f"unable to process file ({filename})", file=sys.stderr)
         return ""
 
-    def __call__(self, files: Sequence[str] | Generator[str]) -> Generator[str]:
-        with Pool(processes=self._workers) as pool:
-            formatted_lines = pool.map(self.one, files)
+    def __call__(self, files: Iterable[str]) -> Iterator[str]:
+        if self._workers == 1:
+            formatted_lines = [self.one(fn) for fn in files]
+        else:
+            with Pool(processes=self._workers) as pool:
+                formatted_lines = pool.map(self.one, files)
         return (line for line in formatted_lines if line)
 
 
