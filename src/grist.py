@@ -160,6 +160,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     group.add_argument(
+        "--add-type",
+        dest="add_types",
+        action="append",
+        metavar="TYPE",
+        default=None,
+        type=_validate_type,
+        help="add this type (repeatable) to the current type set",
+    )
+    group.add_argument(
         "--no-type",
         dest="no_types",
         action="append",
@@ -209,7 +218,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    all_types = set(args.types if args.types is not None else defaults["types"])
+    all_types = set(args.types if args.types is not None else defaults["types"]) | set(
+        args.add_types if args.add_types else {}
+    )
     no_types = set(args.no_types if args.no_types is not None else defaults["no_types"])
 
     encoding = set()
