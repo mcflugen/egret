@@ -51,6 +51,23 @@ def test_type(capsys, tmpdir, toml, python):
     assert matches == expected
 
 
+@pytest.mark.parametrize("python", (True, False))
+@pytest.mark.parametrize("toml", (True, False))
+def test_add_type(capsys, tmpdir, toml, python):
+    (tmpdir / "baz.py").write_text("foobar\n", encoding="utf-8")
+    (tmpdir / "baz.toml").write_text("foobar\n", encoding="utf-8")
+
+    expected = {name for ok, name in ((python, "baz.py"), (toml, "baz.toml")) if ok}
+    args = ["--type=json"] + [
+        f"--add-type={tag}" for ok, tag in ((toml, "toml"), (python, "python")) if ok
+    ]
+    with tmpdir.as_cwd():
+        main(["--walk", "foobar", "-l", *args])
+
+    matches = {line.strip() for line in capsys.readouterr().out.splitlines()}
+    assert matches == expected
+
+
 @pytest.mark.parametrize("text", (True, False))
 @pytest.mark.parametrize("binary", (True, False))
 def test_encoding(capsys, tmpdir, text, binary):
